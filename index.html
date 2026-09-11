@@ -998,7 +998,28 @@ async function callClaude(prompt, log, attempt, maxTokens){
 function parseModelJSON(text){
   let cleaned = text.trim();
   cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
-  return JSON.parse(cleaned);
+
+  // If the model added stray text before/after the JSON despite instructions, trim to the
+  // outermost {...} — helps with an accidental one-line preamble or sign-off.
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if(firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace){
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch(firstErr){
+    // Common, safe repair: a trailing comma right before a closing ] or } — valid in a JS
+    // object literal, not valid JSON, and the most frequent way a long generated response
+    // fails to parse. This can never break text that was already valid JSON.
+    const repaired = cleaned.replace(/,(\s*[\]}])/g, '$1');
+    try {
+      return JSON.parse(repaired);
+    } catch(secondErr){
+      throw firstErr; // the original error usually points at the real problem more precisely
+    }
+  }
 }
 
 /* ============================================================
