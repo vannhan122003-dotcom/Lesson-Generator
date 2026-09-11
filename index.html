@@ -410,15 +410,35 @@ function probeImageDims(dataUri){
 }
 
 function extractDocxWithImages(arrayBuffer){
+  const seenImageHashes = {}; // dedup: Word sometimes embeds the same picture multiple
+                                // times for different renditions/sizes
   return mammoth.convertToHtml({ arrayBuffer: arrayBuffer }, {
     convertImage: mammoth.images.imgElement(function(image){
+      const contentType = image.contentType || '';
+      // EMF/WMF are Windows vector fallback formats — no browser can render them as <img>.
+      // Returning {} gives mammoth's <img> no src/id, so our text walker treats it as if
+      // no image was there at all, instead of embedding a guaranteed-broken picture.
+      if(/emf|wmf/i.test(contentType)){
+        return Promise.resolve({});
+      }
       return image.read('base64').then(function(imageBuffer){
-        imageCounter++;
-        const id = 'gg-img-' + imageCounter;
-        const dataUri = 'data:' + image.contentType + ';base64,' + imageBuffer;
-        imageStore[id] = dataUri;
+        const dataUri = 'data:' + contentType + ';base64,' + imageBuffer;
         return probeImageDims(dataUri).then(function(dims){
+          // Skip degenerate placeholder pixels (list-bullet artifacts, tracking pixels,
+          // leftover formatting cruft) — real illustrations are never this small.
+          if(dims.w < 24 || dims.h < 24){
+            return {};
+          }
+          const hash = imageBuffer.length + ':' + imageBuffer.slice(0, 48);
+          if(seenImageHashes[hash]){
+            const existingId = seenImageHashes[hash];
+            return { src: imageStore[existingId], 'data-gg-id': existingId };
+          }
+          imageCounter++;
+          const id = 'gg-img-' + imageCounter;
+          imageStore[id] = dataUri;
           imageDims[id] = dims;
+          seenImageHashes[hash] = id;
           return { src: dataUri, 'data-gg-id': id };
         });
       });
