@@ -682,13 +682,14 @@ function renderInlineFigure(uri){
 // the text, matching how Word's "square" text wrapping actually looked in the original document.
 // Large or detail-dense images would become illegible shrunk to that size, so those break out
 // of the paragraph into a full-width block instead, even though the source happened to mark
-// them as sitting inside a paragraph's flow.
-function resolveInlineImages(html){
+// them as sitting inside a paragraph's flow. Pass forceLarge for contexts where a small/icon
+// classification is never legitimate (e.g. a Writing Task 1 chart) regardless of pixel size.
+function resolveInlineImages(html, forceLarge){
   if(!html) return html;
   return html.replace(/\[IMAGE:(gg-img-\d+)\]/g, function(match, id){
     const uri = imageStore[id];
     if(!uri) return '';
-    if(isLargeDiagram(imageDims[id])){
+    if(forceLarge || isLargeDiagram(imageDims[id])){
       return '</p>' + renderDiagramBlock(uri, true) + '<p>';
     }
     return renderInlineFigure(uri);
@@ -830,7 +831,7 @@ function renderPracticeLearn(sk){
   if(sk.practice_kind === 'writing'){
     return '<div class="section-label">WRITING TASK</div>' +
       '<h2 class="h">' + esc(sk.task_label || 'Writing Task') + '</h2>' +
-      resolveInlineImages(sk.task_html || '');
+      resolveInlineImages(sk.task_html || '', true);
   }
   if(sk.practice_kind === 'speaking'){
     let out = '<div class="section-label">SPEAKING</div><h2 class="h">' + esc(sk.skill_label || 'Speaking') + '</h2>';
